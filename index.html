@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Industrial Instrumentation Learning Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Custom styles for specific component needs */
+        body {
+            background-color: #fdfbf7; /* Warm neutral background */
+            color: #1f2937;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        /* Chart Container Styling - Mandatory per requirements */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+
+        /* HART FSK Animation Simulation */
+        .fsk-wave {
+            width: 100%;
+            height: 60px;
+            background: repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 19px,
+                #e5e7eb 20px
+            );
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .analog-line {
+            position: absolute;
+            top: 30px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: #3b82f6;
+            transition: top 1s ease-in-out;
+        }
+
+        .digital-pulse {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #ef4444;
+            opacity: 0;
+            transform: translateY(-50%);
+        }
+
+        @keyframes transmit {
+            0% { left: 0; opacity: 1; }
+            100% { left: 100%; opacity: 0; }
+        }
+
+        .transmitting .digital-pulse {
+            animation: transmit 1s linear infinite;
+        }
+
+        /* Hide scrollbar for cleaner UI in overflow containers */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+    <!-- Chosen Palette: Warm Industrial -->
+    <!-- Primary: Steel Blue (#3b82f6), Accent: Safety Orange (#f97316), Background: Warm Neutral (#fdfbf7) -->
+</head>
+<body class="flex flex-col min-h-screen">
+
+    <!-- Application Structure Plan: 
+         The app is designed as a dashboard with a sidebar/top navigation for mobile.
+         1. Dashboard/Overview: Quick access to key concepts and summary stats.
+         2. Signal Lab: The core interactive element. A calculator and visualizer for Linear vs Square Root scaling. Users can input ranges and values to see the math happen in real-time on a Chart.js graph.
+         3. Transmitter Guide: A card-based layout explaining the 4 main types, expanding for details.
+         4. HART Simulator: A functional mockup of a handheld communicator to demonstrate the "Hidden Data" concept.
+         5. Quiz Mode: A gamified section to test the user's knowledge.
+         Rationale: This structure moves from Theory (Guide) to Practice (Lab/HART) to Assessment (Quiz), mirroring a natural learning flow.
+    -->
+
+    <!-- Navigation -->
+    <nav class="bg-slate-800 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <span class="text-2xl mr-2">⚙️</span>
+                    <span class="font-bold text-xl tracking-tight">InstrumentLearn</span>
+                </div>
+                <div class="hidden md:flex space-x-8">
+                    <button onclick="navTo('overview')" class="nav-btn text-slate-300 hover:text-white transition px-3 py-2 rounded-md text-sm font-medium">Overview</button>
+                    <button onclick="navTo('signal-lab')" class="nav-btn text-slate-300 hover:text-white transition px-3 py-2 rounded-md text-sm font-medium">Signal Lab</button>
+                    <button onclick="navTo('transmitters')" class="nav-btn text-slate-300 hover:text-white transition px-3 py-2 rounded-md text-sm font-medium">Transmitter Types</button>
+                    <button onclick="navTo('hart-sim')" class="nav-btn text-slate-300 hover:text-white transition px-3 py-2 rounded-md text-sm font-medium">HART Protocol</button>
+                    <button onclick="navTo('quiz')" class="nav-btn bg-orange-600 hover:bg-orange-700 text-white transition px-4 py-2 rounded-md text-sm font-medium">Practice Quiz</button>
+                </div>
+                <!-- Mobile menu button -->
+                <div class="md:hidden flex items-center">
+                    <button id="mobile-menu-btn" class="text-slate-300 hover:text-white focus:outline-none p-2">
+                        <span class="text-2xl">☰</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- Mobile Menu -->
+        <div id="mobile-menu" class="hidden md:hidden bg-slate-700 pb-4">
+            <button onclick="navTo('overview')" class="block w-full text-left px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-600">Overview</button>
+            <button onclick="navTo('signal-lab')" class="block w-full text-left px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-600">Signal Lab</button>
+            <button onclick="navTo('transmitters')" class="block w-full text-left px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-600">Transmitter Types</button>
+            <button onclick="navTo('hart-sim')" class="block w-full text-left px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-600">HART Protocol</button>
+            <button onclick="navTo('quiz')" class="block w-full text-left px-4 py-2 text-orange-400 hover:text-orange-300 font-bold">Practice Quiz</button>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow max-w-7xl mx-auto px-4 py-8 w-full">
+
+        <!-- SECTION: Overview -->
+        <section id="overview" class="view-section animate-fade-in">
+            <div class="text-center mb-12">
+                <h1 class="text-4xl font-extrabold text-slate-800 mb-4">Industrial Instrumentation & Control</h1>
+                <p class="text-lg text-slate-600 max-w-2xl mx-auto">
+                    Master the fundamentals of industrial transmitters, signal scaling, and digital communication protocols. Explore the connection between the physical world and control systems.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+                <div class="bg-white p-6 rounded-xl shadow-md border-t-4 border-blue-500 hover:shadow-lg transition">
+                    <div class="text-4xl mb-4">📡</div>
+                    <h3 class="text-xl font-bold text-slate-800 mb-2">Standard Signals</h3>
+                    <p class="text-slate-600 text-sm mb-4">Understand why 4-20 mA is the gold standard for long-distance transmission and the concept of "Live Zero".</p>
+                    <button onclick="navTo('signal-lab')" class="text-blue-600 font-semibold text-sm hover:underline">Go to Lab &rarr;</button>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md border-t-4 border-orange-500 hover:shadow-lg transition">
+                    <div class="text-4xl mb-4">🎛️</div>
+                    <h3 class="text-xl font-bold text-slate-800 mb-2">Transmitters</h3>
+                    <p class="text-slate-600 text-sm mb-4">Explore Temperature, Pressure, Level, and Flow transmitters and their internal components.</p>
+                    <button onclick="navTo('transmitters')" class="text-orange-600 font-semibold text-sm hover:underline">Explore Types &rarr;</button>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md border-t-4 border-green-500 hover:shadow-lg transition">
+                    <div class="text-4xl mb-4">🔌</div>
+                    <h3 class="text-xl font-bold text-slate-800 mb-2">HART Protocol</h3>
+                    <p class="text-slate-600 text-sm mb-4">Discover how smart devices communicate digital data over analog wires using FSK technology.</p>
+                    <button onclick="navTo('hart-sim')" class="text-green-600 font-semibold text-sm hover:underline">Open Simulator &rarr;</button>
+                </div>
+            </div>
+
+            <div class="bg-slate-100 rounded-2xl p-8 mb-8">
+                <h2 class="text-2xl font-bold text-slate-800 mb-4">Why We Use Transmitters</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="flex items-start">
+                        <span class="bg-white p-2 rounded-full text-xl shadow-sm mr-4">📏</span>
+                        <div>
+                            <h4 class="font-bold text-slate-700">Distance</h4>
+                            <p class="text-sm text-slate-600">Raw sensor signals (mV, Ohm) degrade over meters. Transmitters send robust signals (mA) over kilometers.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="bg-white p-2 rounded-full text-xl shadow-sm mr-4">🛡️</span>
+                        <div>
+                            <h4 class="font-bold text-slate-700">Noise Immunity</h4>
+                            <p class="text-sm text-slate-600">Current loops are highly resistant to EMI from motors and heavy machinery in factory environments.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="bg-white p-2 rounded-full text-xl shadow-sm mr-4">🔋</span>
+                        <div>
+                            <h4 class="font-bold text-slate-700">Live Zero</h4>
+                            <p class="text-sm text-slate-600">Starting at 4mA allows instant detection of wire breaks (0mA), distinguishing faults from zero readings.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="bg-white p-2 rounded-full text-xl shadow-sm mr-4">🧠</span>
+                        <div>
+                            <h4 class="font-bold text-slate-700">Standardization</h4>
+                            <p class="text-sm text-slate-600">Standardized output allows a PLC to read temperature, pressure, or flow using the exact same input card.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION: Signal Lab -->
+        <section id="signal-lab" class="view-section hidden animate-fade-in">
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold text-slate-800">Signal Calibration Lab</h2>
+                <p class="text-slate-600">Visualize the relationship between physical measurements and electrical signals. Experiment with linear scaling and square root extraction.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <!-- Controls -->
+                <div class="lg:col-span-4 space-y-6">
+                    <div class="bg-white p-6 rounded-xl shadow-md">
+                        <h3 class="font-bold text-lg text-slate-700 mb-4 border-b pb-2">Configuration</h3>
+                        
+                        <!-- Signal Type -->
+                        <div class="mb-4">
+                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Signal Type</label>
+                            <div class="flex bg-slate-100 p-1 rounded-lg">
+                                <button onclick="setSignalType('4-20')" id="btn-4-20" class="flex-1 py-1 text-sm rounded-md bg-white shadow-sm font-medium transition">4-20 mA</button>
+                                <button onclick="setSignalType('1-5')" id="btn-1-5" class="flex-1 py-1 text-sm rounded-md text-slate-500 font-medium transition">1-5 V</button>
+                            </div>
+                        </div>
+
+                        <!-- Mode -->
+                        <div class="mb-6">
+                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Transfer Function</label>
+                            <div class="flex bg-slate-100 p-1 rounded-lg">
+                                <button onclick="setMode('linear')" id="btn-linear" class="flex-1 py-1 text-sm rounded-md bg-white shadow-sm font-medium transition">Linear</button>
+                                <button onclick="setMode('sqrt')" id="btn-sqrt" class="flex-1 py-1 text-sm rounded-md text-slate-500 font-medium transition">Square Root (Flow)</button>
+                            </div>
+                            <p id="mode-desc" class="text-xs text-slate-500 mt-2">Standard proportional scaling ($y = mx + c$).</p>
+                        </div>
+
+                        <!-- Inputs -->
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700">Engineering Range (Low)</label>
+                                <input type="number" id="input-min" value="0" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm border p-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700">Engineering Range (High)</label>
+                                <input type="number" id="input-max" value="100" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm border p-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700">Current Measurement</label>
+                                <input type="range" id="input-val-slider" min="0" max="100" value="50" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                                <div class="flex justify-between mt-1">
+                                    <input type="number" id="input-val-text" value="50" class="w-20 text-sm border-gray-300 rounded-md border p-1 text-center">
+                                    <span class="text-sm text-slate-500" id="unit-label">Units</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Results -->
+                    <div class="bg-slate-800 text-white p-6 rounded-xl shadow-md">
+                        <h3 class="font-bold text-lg mb-4 border-b border-slate-600 pb-2">Output</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <div class="text-xs text-slate-400 uppercase">Signal Output</div>
+                                <div class="text-3xl font-mono text-green-400" id="output-signal">12.00 mA</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400 uppercase">Percent of Span</div>
+                                <div class="text-3xl font-mono text-blue-400" id="output-percent">50.0%</div>
+                            </div>
+                        </div>
+                        <div class="mt-4 pt-4 border-t border-slate-600">
+                            <div class="text-xs text-slate-400 uppercase mb-1">Formula Used</div>
+                            <div class="font-mono text-xs text-orange-300 bg-slate-900 p-2 rounded" id="calc-formula">
+                                Signal = 4 + (0.50 * 16)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Visualization -->
+                <!-- Visualization & Content Choices:
+                     Goal: Visualize relationship (Linear vs Non-linear).
+                     Method: Chart.js Line Chart.
+                     Interaction: Updates dynamically as user drags slider or changes inputs.
+                     Justification: A line chart clearly shows the slope (gain) and the curve of square root extraction.
+                -->
+                <div class="lg:col-span-8 bg-white p-6 rounded-xl shadow-md flex flex-col">
+                    <h3 class="font-bold text-lg text-slate-700 mb-4">Transfer Function Visualizer</h3>
+                    <div class="flex-grow flex items-center justify-center bg-slate-50 rounded-lg border border-slate-100 p-4">
+                        <div class="chart-container">
+                            <canvas id="scalingChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="mt-4 text-sm text-slate-500 italic">
+                        The red dot indicates your current operating point. Notice how the Live Zero (offset) means the graph doesn't start at 0 on the Y-axis.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION: Transmitter Types -->
+        <section id="transmitters" class="view-section hidden animate-fade-in">
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold text-slate-800">Transmitter Types</h2>
+                <p class="text-slate-600">Click on a transmitter type to reveal its internal components and typical industrial applications.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <button onclick="showTxDetail('temp')" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition border border-slate-200 text-left group">
+                    <div class="text-4xl mb-3 group-hover:scale-110 transition">🌡️</div>
+                    <h3 class="font-bold text-lg text-slate-800">Temperature</h3>
+                    <p class="text-xs text-slate-500 mt-1">RTDs & Thermocouples</p>
+                </button>
+                <button onclick="showTxDetail('pressure')" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition border border-slate-200 text-left group">
+                    <div class="text-4xl mb-3 group-hover:scale-110 transition">🛑</div>
+                    <h3 class="font-bold text-lg text-slate-800">Pressure</h3>
+                    <p class="text-xs text-slate-500 mt-1">Gauge & Absolute</p>
+                </button>
+                <button onclick="showTxDetail('level')" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition border border-slate-200 text-left group">
+                    <div class="text-4xl mb-3 group-hover:scale-110 transition">💧</div>
+                    <h3 class="font-bold text-lg text-slate-800">Level</h3>
+                    <p class="text-xs text-slate-500 mt-1">Hydrostatic & Radar</p>
+                </button>
+                <button onclick="showTxDetail('flow')" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition border border-slate-200 text-left group">
+                    <div class="text-4xl mb-3 group-hover:scale-110 transition">🌊</div>
+                    <h3 class="font-bold text-lg text-slate-800">Flow</h3>
+                    <p class="text-xs text-slate-500 mt-1">Differential Pressure</p>
+                </button>
+            </div>
+
+            <!-- Detail View -->
+            <div id="tx-detail-container" class="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+                <div class="bg-slate-50 p-6 border-b border-slate-200 flex justify-between items-center">
+                    <div>
+                        <h3 id="tx-title" class="text-2xl font-bold text-slate-800">Select a Transmitter</h3>
+                        <p id="tx-subtitle" class="text-slate-500">View details on internal components and logic.</p>
+                    </div>
+                    <div class="text-5xl opacity-20" id="tx-icon">⚙️</div>
+                </div>
+                <div class="p-8">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                            <h4 class="font-bold text-slate-700 mb-2 border-b pb-1">How It Works</h4>
+                            <p id="tx-desc" class="text-slate-600 mb-4 leading-relaxed">
+                                Select a transmitter type above to learn more about its operation principles and signal conversion methods.
+                            </p>
+                            <h4 class="font-bold text-slate-700 mb-2 border-b pb-1">Key Components</h4>
+                            <ul id="tx-components" class="list-disc list-inside text-slate-600 space-y-1">
+                                <li>Primary Element (Sensor)</li>
+                                <li>Transducer/Conditioner</li>
+                                <li>Output Stage (4-20mA)</li>
+                            </ul>
+                        </div>
+                        <div class="bg-slate-800 rounded-xl p-6 text-slate-200 font-mono text-sm relative">
+                            <div class="absolute top-2 right-2 text-xs text-slate-500">BLOCK DIAGRAM</div>
+                            <div id="tx-diagram" class="mt-4 space-y-4">
+                                <!-- ASCII/HTML Diagram populated by JS -->
+                                <div class="text-center p-4 border border-dashed border-slate-600 rounded">
+                                    [ Sensor Input ] --> [ Signal Conditioner ] --> [ 4-20mA Output ]
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION: HART Protocol -->
+        <section id="hart-sim" class="view-section hidden animate-fade-in">
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold text-slate-800">HART Communicator Simulator</h2>
+                <p class="text-slate-600">Simulate a connection to a Smart Transmitter. Send commands to read hidden digital data over the analog loop.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                <!-- Visualizer -->
+                <div class="flex flex-col justify-center">
+                    <div class="bg-white p-6 rounded-xl shadow-md mb-6 relative">
+                        <h3 class="font-bold text-slate-700 mb-4">Signal Path Visualizer</h3>
+                        <!-- FSK Simulation -->
+                        <div class="h-32 bg-slate-100 rounded-lg border border-slate-300 relative overflow-hidden flex items-center justify-center">
+                            <div class="absolute inset-x-0 h-0.5 bg-blue-500" style="top: 60%;"></div> <!-- Analog Base -->
+                            <div class="absolute inset-0 flex items-center justify-center opacity-20 text-6xl font-bold text-slate-300">
+                                4 - 20 mA
+                            </div>
+                            <!-- Digital FSK overlay -->
+                            <canvas id="hartCanvas" width="500" height="120" class="absolute inset-0 w-full h-full"></canvas>
+                        </div>
+                        <div class="mt-2 text-xs text-slate-500 flex justify-between">
+                            <span>Analog Signal (Process Variable)</span>
+                            <span>Digital FSK (Data)</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 p-6 rounded-xl border border-slate-200">
+                        <h3 class="font-bold text-slate-700 mb-2">Command Categories</h3>
+                        <ul class="space-y-3 text-sm">
+                            <li class="flex items-center">
+                                <span class="w-3 h-3 rounded-full bg-green-500 mr-2"></span>
+                                <span><strong>Universal:</strong> Read by ALL devices (Tag, ID).</span>
+                            </li>
+                            <li class="flex items-center">
+                                <span class="w-3 h-3 rounded-full bg-blue-500 mr-2"></span>
+                                <span><strong>Common Practice:</strong> Standard functions (Change Range).</span>
+                            </li>
+                            <li class="flex items-center">
+                                <span class="w-3 h-3 rounded-full bg-purple-500 mr-2"></span>
+                                <span><strong>Device Specific:</strong> Unique features (Self-test).</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Handheld Simulator -->
+                <div class="bg-slate-900 p-1 rounded-3xl shadow-2xl max-w-sm mx-auto w-full">
+                    <div class="bg-slate-800 rounded-[22px] p-4 h-[500px] flex flex-col relative border-4 border-slate-700">
+                        <!-- Screen -->
+                        <div class="bg-[#9ea792] flex-grow rounded border-4 border-slate-600 p-2 font-mono text-slate-900 shadow-inner relative overflow-hidden">
+                            <!-- Status Bar -->
+                            <div class="border-b border-slate-700 pb-1 mb-2 flex justify-between text-xs font-bold">
+                                <span>HART COMM</span>
+                                <span id="comm-status">ONLINE</span>
+                            </div>
+                            
+                            <!-- Dynamic Screen Content -->
+                            <div id="comm-screen" class="space-y-1">
+                                <div class="font-bold">Main Menu</div>
+                                <div class="cursor-pointer hover:bg-black hover:text-[#9ea792] px-1">> 1. Online</div>
+                                <div class="cursor-pointer hover:bg-black hover:text-[#9ea792] px-1">  2. Utility</div>
+                                <div class="cursor-pointer hover:bg-black hover:text-[#9ea792] px-1">  3. Setup</div>
+                                <div class="mt-4 text-xs text-slate-700 text-center">Select an option...</div>
+                            </div>
+
+                            <!-- Sim Overlay -->
+                            <div id="loading-overlay" class="absolute inset-0 bg-[#9ea792] flex items-center justify-center hidden">
+                                <div class="text-center font-bold animate-pulse">POLLING...</div>
+                            </div>
+                        </div>
+
+                        <!-- Buttons -->
+                        <div class="mt-4 grid grid-cols-3 gap-2">
+                            <button onclick="hartCommand('poll')" class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold py-2 rounded shadow active:transform active:translate-y-0.5">POLL</button>
+                            <button onclick="hartCommand('vars')" class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold py-2 rounded shadow active:transform active:translate-y-0.5">VARS</button>
+                            <button onclick="hartCommand('diag')" class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold py-2 rounded shadow active:transform active:translate-y-0.5">DIAG</button>
+                            <button onclick="hartCommand('back')" class="col-start-2 bg-red-800 hover:bg-red-700 text-white text-xs font-bold py-2 rounded shadow active:transform active:translate-y-0.5 mt-2">BACK</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION: Quiz -->
+        <section id="quiz" class="view-section hidden animate-fade-in">
+            <div class="max-w-2xl mx-auto">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold text-slate-800">Knowledge Check</h2>
+                    <p class="text-slate-600">Test your mastery of transmitters and scaling calculations.</p>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                    <div class="bg-slate-800 p-4 flex justify-between items-center text-white">
+                        <span class="font-bold">Question <span id="q-current">1</span> of <span id="q-total">5</span></span>
+                        <span class="text-orange-400 font-mono" id="score-display">Score: 0</span>
+                    </div>
+                    
+                    <div class="p-8">
+                        <div id="quiz-content">
+                            <p class="text-lg font-medium text-slate-800 mb-6" id="question-text">Loading question...</p>
+                            <div class="space-y-3" id="options-container">
+                                <!-- Options injected by JS -->
+                            </div>
+                        </div>
+                        <div id="quiz-feedback" class="hidden mt-6 p-4 rounded-lg bg-slate-50 border">
+                            <!-- Feedback injected by JS -->
+                        </div>
+                    </div>
+                    
+                    <div class="bg-slate-50 p-4 border-t border-slate-200 flex justify-end">
+                        <button onclick="nextQuestion()" id="btn-next" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>Next Question</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-slate-400 py-6 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p>&copy; 2026 Industrial Instrumentation Learning Hub. Built for training purposes.</p>
+        </div>
+    </footer>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // --- State Management ---
+        const state = {
+            currentView: 'overview',
+            lab: {
+                min: 0,
+                max: 100,
+                val: 50,
+                signalType: '4-20', // or '1-5'
+                mode: 'linear' // or 'sqrt'
+            },
+            hart: {
+                isPolling: false,
+                currentScreen: 'main'
+            },
+            quiz: {
+                currentQIndex: 0,
+                score: 0,
+                answered: false
+            }
+        };
+
+        // --- Navigation ---
+        function navTo(viewId) {
+            // Update UI State
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            document.getElementById(viewId).classList.remove('hidden');
+            
+            // Mobile menu close
+            document.getElementById('mobile-menu').classList.add('hidden');
+            
+            // Specific initializations
+            if(viewId === 'signal-lab') updateLab();
+            if(viewId === 'hart-sim') startHartAnim();
+            
+            window.scrollTo(0,0);
+        }
+
+        document.getElementById('mobile-menu-btn').addEventListener('click', () => {
+            document.getElementById('mobile-menu').classList.toggle('hidden');
+        });
+
+        // --- Signal Lab Logic ---
+        let scalingChart = null;
+
+        function initChart() {
+            const ctx = document.getElementById('scalingChart').getContext('2d');
+            scalingChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: 'Transfer Function',
+                        borderColor: '#3b82f6',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false,
+                        data: [], // Populated dynamically
+                        tension: 0.1
+                    }, {
+                        label: 'Operating Point',
+                        borderColor: '#f97316',
+                        backgroundColor: '#f97316',
+                        pointRadius: 6,
+                        pointHoverRadius: 8,
+                        data: [] // Single point
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: { display: true, text: 'Physical Measurement (Eng Units)' },
+                            min: 0,
+                            max: 100
+                        },
+                        y: {
+                            title: { display: true, text: 'Signal Output' },
+                            min: 0,
+                            max: 24 // Give some headroom above 20mA
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ` ${context.parsed.y.toFixed(2)} ${state.lab.signalType === '4-20' ? 'mA' : 'V'}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function setSignalType(type) {
+            state.lab.signalType = type;
+            document.getElementById('btn-4-20').className = type === '4-20' ? "flex-1 py-1 text-sm rounded-md bg-white shadow-sm font-medium transition text-blue-600" : "flex-1 py-1 text-sm rounded-md text-slate-500 font-medium transition";
+            document.getElementById('btn-1-5').className = type === '1-5' ? "flex-1 py-1 text-sm rounded-md bg-white shadow-sm font-medium transition text-blue-600" : "flex-1 py-1 text-sm rounded-md text-slate-500 font-medium transition";
+            updateLab();
+        }
+
+        function setMode(mode) {
+            state.lab.mode = mode;
+            document.getElementById('btn-linear').className = mode === 'linear' ? "flex-1 py-1 text-sm rounded-md bg-white shadow-sm font-medium transition text-blue-600" : "flex-1 py-1 text-sm rounded-md text-slate-500 font-medium transition";
+            document.getElementById('btn-sqrt').className = mode === 'sqrt' ? "flex-1 py-1 text-sm rounded-md bg-white shadow-sm font-medium transition text-blue-600" : "flex-1 py-1 text-sm rounded-md text-slate-500 font-medium transition";
+            
+            document.getElementById('mode-desc').textContent = mode === 'linear' 
+                ? "Standard proportional scaling ($y = mx + c$)." 
+                : "Used for DP Flow meters. Flow is proportional to the square root of pressure.";
+            updateLab();
+        }
+
+        function updateLab() {
+            // Get inputs
+            const min = parseFloat(document.getElementById('input-min').value) || 0;
+            const max = parseFloat(document.getElementById('input-max').value) || 100;
+            const val = parseFloat(document.getElementById('input-val-slider').value) || 0;
+            
+            // Sync slider and text
+            document.getElementById('input-val-slider').min = min;
+            document.getElementById('input-val-slider').max = max;
+            document.getElementById('input-val-text').value = val;
+
+            // Signal Constants
+            const sigMin = state.lab.signalType === '4-20' ? 4 : 1;
+            const sigMax = state.lab.signalType === '4-20' ? 20 : 5;
+            const sigSpan = sigMax - sigMin;
+            const unit = state.lab.signalType === '4-20' ? 'mA' : 'V';
+            
+            // Calculations
+            const span = max - min;
+            let fraction = (val - min) / span;
+            
+            // Clamp fraction 0-1 for math safety
+            if(fraction < 0) fraction = 0;
+            if(fraction > 1) fraction = 1;
+
+            // Apply Mode
+            let outputFraction = fraction;
+            if(state.lab.mode === 'sqrt') {
+                outputFraction = Math.sqrt(fraction);
+            }
+
+            const signal = sigMin + (outputFraction * sigSpan);
+            const percent = outputFraction * 100;
+
+            // Update DOM
+            document.getElementById('output-signal').textContent = `${signal.toFixed(2)} ${unit}`;
+            document.getElementById('output-percent').textContent = `${percent.toFixed(1)}%`;
+            
+            // Formula display
+            const formulaStr = state.lab.mode === 'linear'
+                ? `Signal = ${sigMin} + ((${val} - ${min})/${span} * ${sigSpan})`
+                : `Signal = ${sigMin} + (sqrt(${fraction.toFixed(2)}) * ${sigSpan})`;
+            document.getElementById('calc-formula').textContent = formulaStr;
+
+            // Update Chart
+            updateChartData(min, max, val, signal, sigMin, sigMax);
+        }
+
+        function updateChartData(min, max, currentVal, currentSig, sigMin, sigMax) {
+            if(!scalingChart) initChart();
+
+            // Generate curve points
+            const steps = 20;
+            const stepSize = (max - min) / steps;
+            const curveData = [];
+
+            for(let i=0; i<=steps; i++) {
+                const x = min + (i * stepSize);
+                let frac = i / steps;
+                if(state.lab.mode === 'sqrt') frac = Math.sqrt(frac);
+                const y = sigMin + (frac * (sigMax - sigMin));
+                curveData.push({x, y});
+            }
+
+            scalingChart.data.datasets[0].data = curveData;
+            scalingChart.data.datasets[1].data = [{x: currentVal, y: currentSig}];
+            
+            // Update Scales
+            scalingChart.options.scales.x.min = min;
+            scalingChart.options.scales.x.max = max;
+            scalingChart.options.scales.y.max = sigMax * 1.2; // Headroom
+            scalingChart.options.plugins.tooltip.callbacks.label = (ctx) => ` ${ctx.parsed.y.toFixed(2)} ${state.lab.signalType === '4-20' ? 'mA' : 'V'}`;
+            
+            scalingChart.update();
+        }
+
+        // Listeners
+        document.getElementById('input-min').addEventListener('input', updateLab);
+        document.getElementById('input-max').addEventListener('input', updateLab);
+        document.getElementById('input-val-slider').addEventListener('input', (e) => {
+            document.getElementById('input-val-text').value = e.target.value;
+            updateLab();
+        });
+        document.getElementById('input-val-text').addEventListener('input', (e) => {
+            document.getElementById('input-val-slider').value = e.target.value;
+            updateLab();
+        });
+
+
+        // --- Transmitter Details Logic ---
+        const txData = {
+            'temp': {
+                title: 'Temperature Transmitter',
+                icon: '🌡️',
+                desc: 'Converts sensor resistance (RTD) or millivoltage (Thermocouple) into 4-20 mA. Typically mounted directly in the sensor connection head (hockey puck style).',
+                components: [
+                    'Sensor: RTD (Pt100) or Thermocouple (Type K)',
+                    'Linearization Circuit',
+                    'Cold Junction Compensation (for T/C)',
+                    '4-20mA Output Driver'
+                ],
+                diagram: `
+[Process Heat] -> [Sensor(mV/Ohm)] -> [Amp/ADC]
+                                          |
+                                          v
+      [4-20mA Loop] <--- [DAC] <--- [Microprocessor]
+                `
+            },
+            'pressure': {
+                title: 'Pressure Transmitter',
+                icon: '🛑',
+                desc: 'Uses a diaphragm that flexes under pressure. A piezoresistive or capacitive sensor detects the flex. Used for pressure, level (hydrostatic), and flow (DP).',
+                components: [
+                    'Isolation Diaphragm (SS316)',
+                    'Fill Fluid (Silicone Oil)',
+                    'Sensor Element (Capacitance/Strain)',
+                    'Electronics Housing'
+                ],
+                diagram: `
+[Fluid Pressure] -> [Diaphragm] -> [Capacitor Change]
+                                          |
+                                          v
+      [4-20mA Loop] <--- [DAC] <--- [Signal Processing]
+                `
+            },
+            'level': {
+                title: 'Level Transmitter',
+                icon: '💧',
+                desc: 'Measures liquid height. Methods include Hydrostatic (pressure at bottom), Radar (Time of Flight), and Ultrasonic. Essential for inventory and safety.',
+                components: [
+                    'Probe/Antenna (Radar) or Diaphragm (Hydrostatic)',
+                    'Time-of-Flight Clock (Radar)',
+                    'Signal Processing (Echo rejection)',
+                    'Output Stage'
+                ],
+                diagram: `
+[Surface Echo] <--- [Radar Pulse] <--- [Transmitter]
+       |                                   |
+       v                                   v
+[Time Calculation] ----------------> [4-20mA Output]
+                `
+            },
+            'flow': {
+                title: 'Flow Transmitter (DP)',
+                icon: '🌊',
+                desc: 'Measures the pressure drop across a restriction (Orifice Plate). Requires square root extraction to linearize the flow rate.',
+                components: [
+                    'High Pressure Port (Upstream)',
+                    'Low Pressure Port (Downstream)',
+                    'Differential Sensor',
+                    'Square Root Calculation'
+                ],
+                diagram: `
+[High P] --\\
+            [DP Sensor] -> [Sqrt Calc] -> [4-20mA]
+[Low P] ---/
+                `
+            }
+        };
+
+        function showTxDetail(type) {
+            const data = txData[type];
+            document.getElementById('tx-title').textContent = data.title;
+            document.getElementById('tx-icon').textContent = data.icon;
+            document.getElementById('tx-desc').textContent = data.desc;
+            
+            const list = document.getElementById('tx-components');
+            list.innerHTML = '';
+            data.components.forEach(c => {
+                const li = document.createElement('li');
+                li.textContent = c;
+                list.appendChild(li);
+            });
+
+            document.getElementById('tx-diagram').innerHTML = `<pre class="text-xs md:text-sm whitespace-pre-wrap">${data.diagram}</pre>`;
+            
+            // Scroll to detail
+            document.getElementById('tx-detail-container').scrollIntoView({behavior: 'smooth', block: 'center'});
+        }
+
+
+        // --- HART Simulator Logic ---
+        let hartCanvasInterval;
+        
+        function startHartAnim() {
+            if(hartCanvasInterval) clearInterval(hartCanvasInterval);
+            const canvas = document.getElementById('hartCanvas');
+            const ctx = canvas.getContext('2d');
+            let offset = 0;
+
+            hartCanvasInterval = setInterval(() => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.beginPath();
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 2;
+                
+                // Draw FSK wave (high freq sine)
+                for (let x = 0; x < canvas.width; x++) {
+                    const y = 60 + Math.sin((x + offset) * 0.5) * 15; 
+                    // 0.5 freq represents the digital data
+                    if(x === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                offset += 5; // Animation speed
+            }, 30);
+        }
+
+        function hartCommand(cmd) {
+            const screen = document.getElementById('comm-screen');
+            const overlay = document.getElementById('loading-overlay');
+            const status = document.getElementById('comm-status');
+
+            // Show loading
+            overlay.classList.remove('hidden');
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+                
+                if (cmd === 'back') {
+                    screen.innerHTML = `
+                        <div class="font-bold">Main Menu</div>
+                        <div class="cursor-pointer hover:bg-black hover:text-[#9ea792] px-1">> 1. Online</div>
+                        <div class="cursor-pointer hover:bg-black hover:text-[#9ea792] px-1">  2. Utility</div>
+                        <div class="cursor-pointer hover:bg-black hover:text-[#9ea792] px-1">  3. Setup</div>
+                        <div class="mt-4 text-xs text-slate-700 text-center">Select an option...</div>
+                    `;
+                    status.textContent = "ONLINE";
+                    return;
+                }
+
+                if (cmd === 'poll') {
+                    screen.innerHTML = `
+                        <div class="font-bold border-b border-slate-600 mb-1">Device Found</div>
+                        <div class="text-sm">Tag: PT-101</div>
+                        <div class="text-sm">Type: Rosemount 3051</div>
+                        <div class="text-sm">ID: 384729</div>
+                        <div class="text-sm mt-2">Addr: 0</div>
+                        <div class="mt-4 text-xs animate-pulse">Scanning...</div>
+                    `;
+                }
+
+                if (cmd === 'vars') {
+                    screen.innerHTML = `
+                        <div class="font-bold border-b border-slate-600 mb-1">Process Vars</div>
+                        <div class="flex justify-between text-sm"><span>PV:</span> <span>45.2 PSI</span></div>
+                        <div class="flex justify-between text-sm"><span>AO:</span> <span>11.23 mA</span></div>
+                        <div class="flex justify-between text-sm"><span>SV:</span> <span>24.5 °C</span></div>
+                        <div class="flex justify-between text-sm"><span>TV:</span> <span>0.00 PSI</span></div>
+                        <div class="mt-2 text-xs bg-slate-700 text-[#9ea792] px-1">REFRESHING</div>
+                    `;
+                }
+
+                if (cmd === 'diag') {
+                    screen.innerHTML = `
+                        <div class="font-bold border-b border-slate-600 mb-1">Status Log</div>
+                        <div class="text-xs mb-1">[x] Device Malfunction</div>
+                        <div class="text-xs mb-1">[ ] Config Changed</div>
+                        <div class="text-xs mb-1">[ ] Cold Start</div>
+                        <div class="text-xs mb-1">[ ] More Status Avail</div>
+                        <div class="mt-2 text-center bg-red-700 text-white font-bold text-xs">FAIL DETECTED</div>
+                    `;
+                    status.textContent = "ALERT";
+                }
+
+            }, 800); // Simulated delay
+        }
+
+
+        // --- Quiz Logic ---
+        const questions = [
+            {
+                q: "A level transmitter is calibrated for 0 to 20 feet (4-20 mA). If the level is 15 feet, what is the output?",
+                options: ["12 mA", "15 mA", "16 mA", "18 mA"],
+                correct: 2, // Index
+                explanation: "15 ft is 75% of the range (15/20). 75% of the 16mA span (12mA) + 4mA offset = 16 mA."
+            },
+            {
+                q: "What is the primary advantage of a 'Live Zero' (4 mA) signal?",
+                options: ["Saves power", "Detects broken wires", "Increases range", "Reduces noise"],
+                correct: 1,
+                explanation: "A reading of 0 mA indicates a fault (broken wire), distinguishing it from a 0% process measurement (4 mA)."
+            },
+            {
+                q: "If a Flow Transmitter outputs 8 mA, what is the flow rate? (Square Root Extraction applies, Range 0-1000 GPM)",
+                options: ["250 GPM", "500 GPM", "707 GPM", "800 GPM"],
+                correct: 1,
+                explanation: "8 mA is 25% of span. sqrt(0.25) = 0.5 (50%). 50% of 1000 GPM is 500 GPM."
+            },
+            {
+                q: "In HART protocol, which variable typically represents the internal device temperature?",
+                options: ["PV (Primary)", "SV (Secondary)", "TV (Tertiary)", "QV (Quaternary)"],
+                correct: 1,
+                explanation: "The Primary Variable (PV) is the main process value. The Secondary Variable (SV) is often the electronics temperature."
+            },
+            {
+                q: "Calculate the Error %: Range 0-100 PSI (4-20 mA). Measured at 50 PSI = 12.08 mA.",
+                options: ["0.5%", "1.0%", "0.08%", "5.0%"],
+                correct: 0,
+                explanation: "Expected: 12.00 mA. Diff: 0.08 mA. Span: 16 mA. (0.08 / 16) * 100 = 0.5%."
+            }
+        ];
+
+        function loadQuiz() {
+            state.quiz.currentQIndex = 0;
+            state.quiz.score = 0;
+            showQuestion();
+        }
+
+        function showQuestion() {
+            const q = questions[state.quiz.currentQIndex];
+            document.getElementById('question-text').textContent = q.q;
+            document.getElementById('q-current').textContent = state.quiz.currentQIndex + 1;
+            document.getElementById('q-total').textContent = questions.length;
+            
+            const container = document.getElementById('options-container');
+            container.innerHTML = '';
+            document.getElementById('quiz-feedback').classList.add('hidden');
+            document.getElementById('btn-next').disabled = true;
+            state.quiz.answered = false;
+
+            q.options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left p-3 rounded-lg border border-slate-300 hover:bg-slate-50 transition quiz-opt";
+                btn.textContent = opt;
+                btn.onclick = () => checkAnswer(idx, btn);
+                container.appendChild(btn);
+            });
+        }
+
+        function checkAnswer(selectedIdx, btnElement) {
+            if(state.quiz.answered) return;
+            state.quiz.answered = true;
+
+            const q = questions[state.quiz.currentQIndex];
+            const isCorrect = selectedIdx === q.correct;
+            
+            // Visuals
+            const opts = document.querySelectorAll('.quiz-opt');
+            opts[q.correct].classList.add('bg-green-100', 'border-green-500', 'text-green-800');
+            
+            if(isCorrect) {
+                state.quiz.score++;
+                document.getElementById('score-display').textContent = `Score: ${state.quiz.score}`;
+            } else {
+                btnElement.classList.add('bg-red-100', 'border-red-500', 'text-red-800');
+            }
+
+            // Feedback
+            const feed = document.getElementById('quiz-feedback');
+            feed.innerHTML = `<strong class="${isCorrect ? 'text-green-600' : 'text-red-600'}">${isCorrect ? 'Correct!' : 'Incorrect.'}</strong> <span class="text-slate-700">${q.explanation}</span>`;
+            feed.classList.remove('hidden');
+
+            document.getElementById('btn-next').disabled = false;
+        }
+
+        function nextQuestion() {
+            state.quiz.currentQIndex++;
+            if(state.quiz.currentQIndex < questions.length) {
+                showQuestion();
+            } else {
+                // End screen
+                document.getElementById('quiz-content').innerHTML = `
+                    <div class="text-center py-8">
+                        <div class="text-6xl mb-4">🏆</div>
+                        <h3 class="text-2xl font-bold text-slate-800 mb-2">Quiz Complete!</h3>
+                        <p class="text-lg text-slate-600">You scored <span class="font-bold text-blue-600">${state.quiz.score} / ${questions.length}</span></p>
+                        <button onclick="loadQuiz()" class="mt-6 bg-slate-800 text-white px-6 py-2 rounded-lg hover:bg-slate-700">Retry Quiz</button>
+                    </div>
+                `;
+                document.getElementById('quiz-feedback').classList.add('hidden');
+                document.getElementById('btn-next').classList.add('hidden');
+            }
+        }
+
+        // --- Init ---
+        window.addEventListener('load', () => {
+            initChart();
+            updateLab();
+            loadQuiz();
+        });
+
+    </script>
+</body>
+</html>
